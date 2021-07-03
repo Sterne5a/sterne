@@ -1,0 +1,64 @@
+rawdata <- read_excel("melb_weather_data.xlsx", sheet="rawdata")
+
+#remove the last 3 rows with dplyr's slice function
+rawdata2 <- slice(rawdata, 1:(n() -3))
+
+#use the gather() function in tidyverse to re-organise data
+rawdata3 <- gather(rawdata2, month, max_temp, Jan:Dec )
+rawdata3 <- na.omit(rawdata3)  # Gets rid of "nonsense" dates like 31JUN.  
+
+#generate random values for 20% of the dataset#
+randomvalues <- sample(x=1:365, size = 73)
+
+#store the pimped data in another data frame to facilitate future analysis
+rawdata4 <- rawdata3
+
+#wipe out the values in the 'max temp' column in the rows that correspond with
+#with the random number
+rawdata4[randomvalues, "max_temp"] <- NA
+
+
+#fill in the missing value using last observation carried forward
+rawdata5 <-na.locf(rawdata4)
+
+
+#impute missing value with the mean
+rawdata6 <- data.frame(round(impute_mean(rawdata4$max_temp), digits=1))
+
+#rename the column with the imputed data
+rawdata7 <- rename(rawdata6, 
+                   max_temp_impute_w_mean = "round.impute_mean.rawdata4.max_temp...digits...1.")
+
+
+#rawdata7 only has one column of data so join the imputed data column with 
+#rawdata4
+rawdata8 <- cbind(rawdata4, impute_max_temp_w_mean = rawdata7$max_temp_impute_w_mean)
+
+#this is a series of stitches that join a column to a table, one at a time
+rawdata9 <- cbind(rawdata8, original_max_temp = rawdata3$max_temp) 
+rawdata10 <- cbind(rawdata9, locf_max_temp = rawdata5$max_temp)
+
+#rename column first before moving it 
+rawdata11 <- rawdata10 %>% rename(max_temp_with_na = "max_temp") %>% 
+  relocate(max_temp_with_na, .after = locf_max_temp)
+
+#relocate another column
+rawdata12 <- rawdata11 %>% relocate(original_max_temp, .before=impute_max_temp_w_mean)
+
+#fills the maxtempwithna column with na values
+rawdata13 <- rawdata12[is.na(rawdata12$max_temp_with_na), ]   
+
+
+##calculate difference between original max temp and LOCF for the entire column
+rawdata13$LOCF_diff <- abs(rawdata13$original_max_temp - rawdata13$locf_max_temp)
+
+##calculate difference between original max temp and impute for the entire column
+rawdata13$mean_diff <- abs(rawdata13$original_max_temp - rawdata13$impute_max_temp_w_mean)
+
+#calculate the mean
+mean(rawdata13$LOCF_diff)
+mean(rawdata13$mean_diff)
+
+#calculate the median
+median(rawdata13$LOCF_diff)
+median(rawdata13$mean_diff)
